@@ -24,9 +24,9 @@ type UserRegistration struct {
 
 func (u *UserRegistration) Register(data forms.UserModel) (resultId interface{}, err error) {
 	ctx := context.TODO()
-	collection := mdbConn.Use("customer", "user_info")
+	collection := mdbConn.Use(forms.DB, forms.DriverCollection)
 
-	filter := bson.M{"email": data.Email, "phone_number": data.PhoneNumber}
+	filter := bson.M{"phone_number": data.PhoneNumber}
 	update := bson.M{"$set": data}
 	opts := options.Update().SetUpsert(true)
 	result, err := collection.UpdateOne(ctx, filter, update, opts)
@@ -38,7 +38,7 @@ func (u *UserRegistration) Register(data forms.UserModel) (resultId interface{},
 
 func (u *UserRegistration) Login(phoneNumber string, otp string) (userData forms.UserModel, err error) {
 	ctx := context.TODO()
-	collection := mdbConn.Use("customer", "user_info")
+	collection := mdbConn.Use(forms.DB, forms.DriverCollection)
 
 	filter := bson.M{"phone_number": phoneNumber}
 
@@ -69,7 +69,7 @@ func (u *UserRegistration) Login(phoneNumber string, otp string) (userData forms
 
 func (u *UserRegistration) GenerateOtp(data string) (done string, err error) {
 	ctx := context.TODO()
-	collection := mdbConn.Use("customer", "user_info")
+	collection := mdbConn.Use(forms.DB, forms.DriverCollection)
 
 	var user forms.UserModel
 	err = collection.FindOne(ctx, bson.M{"phone_number": data}).Decode(&user)
@@ -136,14 +136,30 @@ func (u *UserRegistration) sendSMS(phoneNumber, otp string) error {
 	return nil
 }
 
-func (u *UserRegistration) ExampleGenerateOtp(data string) {
-	otp, err := u.generate()
-	if err != nil {
-		log.Println(err)
+func (u *UserRegistration) ExampleGenerateOtp(data string) (done string, err error) {
+	ctx := context.TODO()
+	collection := mdbConn.Use(forms.DB, forms.DriverCollection)
+
+	var user forms.UserModel
+	err = collection.FindOne(ctx, bson.M{"phone_number": data}).Decode(&user)
+	if err == nil {
+		otp, err := u.generate()
+		if err != nil {
+			return done, err
+		}
+
+		fields := bson.M{
+			"phone_number": user.PhoneNumber,
+			"otp":          otp,
+			"time":         time.Now(),
+		}
+		update := bson.M{"$set": fields}
+		opts := options.Update().SetUpsert(true)
+		_, err = collection.UpdateOne(ctx, bson.M{"phone_number": data}, update, opts)
+		fmt.Println("success")
+	} else {
+		err = errors.New("Not a registered Mobile Number. Please use Registered Mobile Number")
 	}
-	err = u.sendSMS(data, otp)
-	if err != nil {
-		log.Println(err)
-	}
-	fmt.Println("success")
+
+	return done, err
 }
