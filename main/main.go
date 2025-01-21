@@ -1,7 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"nammuru-driver-backend/api"
+)
 
-func main(){
-	fmt.Println("nsdf")
+func main() {
+	api.DriverApi()
 }

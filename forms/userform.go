@@ -28,7 +28,7 @@ type LoginUserModel struct {
 
 type KYC struct {
 	Aadhaar  string `json:"aadhaar" bson:"aadhaar"`
-	DLNumber string `json:"dl_number" bson"dl_number"`
+	DLNumber string `json:"dl_number" bson:"dl_number"`
 }
 
 type Vechicle struct {
