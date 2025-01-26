@@ -1,6 +1,8 @@
 package forms
 
-import "time"
+import (
+	"time"
+)
 
 const (
 	AccountSid       = "ACbcef2267c53f7781e4259253d31adf9f"
@@ -12,26 +14,27 @@ const (
 )
 
 type UserModel struct {
-	Name         string   `json:"name" bson:"name"`
-	Email        string   `json:"email" bson:"email"`
-	PhoneNumber  string   `json:"phone_number" bson:"phone_number"`
-	Gender       string   `json:"gender" bson:"gender"`
-	KYCData      KYC      `json:"kyc" bson:"kyc"`
-	VechicleData Vechicle `json:"vechicle" bson:"vehicle"`
+	Name         string   `json:"name" bson:"name" binding:"-"`
+	Email        string   `json:"email" bson:"email" binding:"-"`
+	PhoneNumber  string   `json:"phone_number" bson:"phone_number" binding:"-"`
+	Gender       string   `json:"gender" bson:"gender" binding:"-"`
+	KYCData      KYC      `json:"kyc" bson:"kyc" binding:"-"`
+	VechicleData Vechicle `json:"vechicle" bson:"vehicle" binding:"-"`
 }
 
 type LoginUserModel struct {
-	PhoneNumber string     `json:"phone_number" bson:"phone_number"`
-	Otp         string     `json:"otp" bson:"otp"`
-	Time        *time.Time `json:"time" bson:"time"`
+	PhoneNumber string     `json:"phone_number" bson:"phone_number" binding:"-"`
+	Otp         string     `json:"otp" bson:"otp" binding:"-"`
+	Time        *time.Time `json:"time" bson:"time" binding:"-"`
 }
 
 type KYC struct {
-	Aadhaar  string `json:"aadhaar" bson:"aadhaar"`
-	DLNumber string `json:"dl_number" bson:"dl_number"`
+	Aadhaar  string `json:"aadhaar" bson:"aadhaar" binding:"-"`
+	DLNumber string `json:"dl_number" bson:"dl_number" binding:"-"`
 }
 
 type Vechicle struct {
-	Registration string `json:"registration" bson:"registration"`
-	Model        string `json:"model" bson:"model"`
+	Registration string `json:"registration" bson:"registration" binding:"-"`
+	Model        string `json:"model" bson:"model" binding:"-"`
+	VehicleImage []byte `json:"vehicle_image" bson:"vehicle_image" binding:"-"`
 }
