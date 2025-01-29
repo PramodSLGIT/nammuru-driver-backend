@@ -163,3 +163,25 @@ func (u *UserRegistration) ExampleGenerateOtp(data string) (done string, err err
 
 	return done, err
 }
+
+func (u *UserRegistration) AddProfileImage(data forms.UserModel) (updateId interface{}, err error) {
+	ctx := context.TODO()
+	collection := mdbConn.Use(forms.DB, forms.DriverCollection)
+
+	filter := bson.M{
+		"phone_number": data.PhoneNumber,
+	}
+
+	update := bson.M{
+		"$set": bson.M{
+			"profile_image": data.ProfileImage,
+		},
+	}
+
+	updateId, err = collection.UpdateOne(ctx, filter, update)
+
+	if err != nil {
+		return updateId, err
+	}
+	return updateId, err
+}

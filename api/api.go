@@ -22,12 +22,19 @@ func DriverApi() {
 
 	router.Use(cors.New(config))
 
-	c1 := router.Group("/c1")
+	d1 := router.Group("/d1")
 	{
+		//user
 		user := new(controllers.UserRegistrationController)
-		c1.POST("/registration", user.Register)
-		c1.GET("/otp/:phonenumber", user.OtpGeneration)
-		c1.GET("/verify/:phonenumber/:otp", user.Login)
+		d1.POST("/registration", user.Register)
+		d1.GET("/otp/:phonenumber", user.OtpGeneration)
+		d1.GET("/verify/:phonenumber/:otp", user.Login)
+		d1.POST("/profileimage", user.AddProfileImage)
+
+		//vehicle
+		vehicle := new(controllers.VehicleController)
+		d1.POST("/vehicledata/:phonenubmer", vehicle.AddVehicleData)
+		d1.POST("/vehicleimage", vehicle.AddVehicleImage)
 	}
 
 	router.NoRoute(func(c *gin.Context) {
