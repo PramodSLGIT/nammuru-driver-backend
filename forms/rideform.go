@@ -14,3 +14,9 @@ type RideForm struct {
 	StartedTime      *time.Time         `json:"started_time" bson:"started_time"`
 	EndTime          *time.Time         `json:"end_time" bson:"end_time"`
 }
+
+type DriverLocation struct {
+	ID        string  `json:"driver_id"`
+	Latitude  float64 `json:"lat"`
+	Longitude float64 `json:"lon"`
+}

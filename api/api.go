@@ -35,6 +35,12 @@ func DriverApi() {
 		vehicle := new(controllers.VehicleController)
 		d1.POST("/vehicledata/:phonenubmer", vehicle.AddVehicleData)
 		d1.POST("/vehicleimage", vehicle.AddVehicleImage)
+
+		//connect to websocket
+		driver := new(controllers.DriverController)
+		d1.GET("/ws/driverlocation", driver.DriverLocation)
+		d1.GET("/getnearbydrivers", driver.GetNearbyDrivers)
+		d1.GET("/getalldrivers", driver.GetAllDrivers)
 	}
 
 	router.NoRoute(func(c *gin.Context) {
