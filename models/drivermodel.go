@@ -3,9 +3,12 @@ package models
 import (
 	"context"
 	"fmt"
+	"log"
 	"nammuru-driver-backend/forms"
 	"nammuru-driver-backend/utils"
+	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/redis/go-redis/v9"
 )
@@ -32,13 +35,13 @@ func (d *DriverModel) UpdateDriverLocation(location forms.DriverLocation) error 
 	return nil
 }
 
-func (d *DriverModel) GetNearbyDrivers(customerLat, customerLon, radius float64) ([]forms.DriverLocation, error) {
+func (d *DriverModel) GetNearbyDrivers(customerLocation forms.CustomerLocation) ([]forms.DriverLocation, error) {
 	ctx := context.TODO()
 
-	driverIds, err := utils.RedisClient.GeoSearch(ctx, "drivers", &redis.GeoSearchQuery{
-		Longitude:  customerLon,
-		Latitude:   customerLat,
-		Radius:     radius,
+	drivers, err := utils.RedisClient.GeoSearch(ctx, "drivers", &redis.GeoSearchQuery{
+		Longitude:  customerLocation.Pickup.Longitude,
+		Latitude:   customerLocation.Pickup.Latitude,
+		Radius:     customerLocation.Radius,
 		RadiusUnit: "km",
 		Sort:       "ASC",
 		Count:      10,
@@ -48,25 +51,51 @@ func (d *DriverModel) GetNearbyDrivers(customerLat, customerLon, radius float64)
 		return nil, fmt.Errorf("failed to fetch drivers: %v", err)
 	}
 
-	if len(driverIds) == 0 {
+	if len(drivers) == 0 {
 		return []forms.DriverLocation{}, nil
 	}
 
 	var driverlocation []forms.DriverLocation
 
-	for _, driverId := range driverIds {
-		pos, err := utils.RedisClient.GeoPos(context.TODO(), "drivers", driverId).Result()
-		if err != nil {
-			fmt.Printf("Error fetching location for driver %s: %v\n", driverId, err)
+	for _, driverId := range drivers {
+		// pos, err := utils.RedisClient.GeoPos(context.TODO(), "drivers", driverId).Result()
+		// if err != nil {
+		// 	fmt.Printf("Error fetching location for driver %s: %v\n", driverId, err)
+		// 	continue
+		// }
+
+		// if len(pos) > 0 && pos[0] != nil {
+		// 	driverlocation = append(driverlocation, forms.DriverLocation{
+		// 		ID:        driverId,
+		// 		Latitude:  pos[0].Latitude,
+		// 		Longitude: pos[0].Longitude,
+		// 	})
+		// }
+
+		// Check if this driver is connected via WebSocket
+		forms.DriverMutex.Lock()
+		conn, exists := forms.DriverConnections[driverId]
+		forms.DriverMutex.Unlock()
+
+		if !exists {
+			log.Println("Driver", driverId, "is not online, skipping.")
 			continue
 		}
 
-		if len(pos) > 0 && pos[0] != nil {
-			driverlocation = append(driverlocation, forms.DriverLocation{
-				ID:        driverId,
-				Latitude:  pos[0].Latitude,
-				Longitude: pos[0].Longitude,
-			})
+		request := gin.H{"message": "New ride request", "customer_id": customerLocation}
+		err := conn.WriteJSON(request)
+
+		if err != nil {
+			log.Println("Error sending ride request to driver", driverId, ":", err)
+			continue
+		}
+
+		log.Println("Ride request sent to driver", driverId)
+
+		// Wait for driver response (max 10 seconds)
+		accepted := WaitForDriverResponse(driverId, 10*time.Second)
+		if accepted {
+			log.Println("Driver", driverId, "accepted the ride. Stopping further requests.")
 		}
 	}
 	return driverlocation, nil
@@ -107,4 +136,22 @@ func (d *DriverModel) GetAllDrivers() ([]forms.DriverLocation, error) {
 	}
 
 	return driverLocations, nil
+}
+
+func WaitForDriverResponse(driverID string, timeout time.Duration) bool {
+	start := time.Now()
+
+	for time.Since(start) < timeout {
+		forms.DriverMutex.Lock()
+		accepted, exists := forms.RideAcceptStatus[driverID]
+		forms.DriverMutex.Unlock()
+
+		if exists && accepted {
+			return true
+		}
+
+		time.Sleep(1 * time.Second) // Check every second
+	}
+
+	return false
 }
