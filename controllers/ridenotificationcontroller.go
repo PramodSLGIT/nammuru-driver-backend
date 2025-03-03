@@ -27,13 +27,17 @@ func (n *NotificationController) RideRequestController(c *gin.Context) {
 				Latitude  float64 `json:"lat"`
 				Longitude float64 `json:"lon"`
 			} `json:"pickup"`
+			DropLoc struct {
+				Latitude  float64 `json:"lat"`
+				Longitude float64 `json:"lon"`
+			} `json:"drop_loc"`
 		}
 
 		if err := conn.ReadJSON(&rideRequest); err != nil {
 			log.Println("Error reading JSON:", err)
 			break
 		}
-		
+
 		conn.WriteJSON(gin.H{"message": "New ride request", "driver_id": rideRequest.DriverID})
 	}
 }
