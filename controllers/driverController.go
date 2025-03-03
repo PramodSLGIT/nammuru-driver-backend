@@ -6,13 +6,18 @@ import (
 	"nammuru-driver-backend/models"
 	"nammuru-driver-backend/utils"
 	"net/http"
+	"sync"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 )
 
 type DriverController struct{}
 
 var drivermodel = new(models.DriverModel)
+
+var DriverConnections = make(map[string]*websocket.Conn)
+var DriverMutex = sync.Mutex{}
 
 // WebSocket connection handler for drivers
 // func (d *DriverController) DriverWebSocket(c *gin.Context) {
@@ -53,13 +58,39 @@ var drivermodel = new(models.DriverModel)
 func (d *DriverController) DriverLocation(c *gin.Context) {
 	conn, err := utils.UpgradeToWebSocket(c)
 	if err != nil {
-		log.Println("WebSocket connection failed:", err)
+		c.JSON(http.StatusBadRequest, gin.H{"WebSocket connection failed": err.Error()})
+
+		c.Abort()
 		return
 	}
 	defer conn.Close()
 
+	var location forms.DriverLocation
+
+	err = conn.ReadJSON(&location)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"Location failed": err.Error()})
+
+		c.Abort()
+		return
+	}
+
+	DriverMutex.Lock()
+	DriverConnections[location.ID] = conn
+	DriverMutex.Unlock()
+
+	err = drivermodel.UpdateDriverLocation(location)
+	if err != nil {
+		log.Println("Error updating location:", err)
+	}
+	defer func() {
+		DriverMutex.Lock()
+		delete(DriverConnections, location.ID) // Remove driver when disconnected
+		DriverMutex.Unlock()
+		log.Println("Driver disconnected:", location.ID)
+	}()
+
 	for {
-		var location forms.DriverLocation
 
 		err := conn.ReadJSON(&location)
 		if err != nil {
