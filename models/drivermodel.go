@@ -37,7 +37,6 @@ func (d *DriverModel) UpdateDriverLocation(location forms.DriverLocation) error 
 
 func (d *DriverModel) GetNearbyDrivers(customerLocation forms.CustomerLocation) ([]forms.DriverLocation, error) {
 	ctx := context.TODO()
-
 	drivers, err := utils.RedisClient.GeoSearch(ctx, "drivers", &redis.GeoSearchQuery{
 		Longitude:  customerLocation.Pickup.Longitude,
 		Latitude:   customerLocation.Pickup.Latitude,
@@ -47,32 +46,13 @@ func (d *DriverModel) GetNearbyDrivers(customerLocation forms.CustomerLocation) 
 		Count:      10,
 	}).Result()
 
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch drivers: %v", err)
-	}
-
-	if len(drivers) == 0 {
-		return []forms.DriverLocation{}, nil
+	if err != nil || len(drivers) == 0 {
+		return nil, fmt.Errorf("no available drivers")
 	}
 
 	var driverlocation []forms.DriverLocation
 
 	for _, driverId := range drivers {
-		// pos, err := utils.RedisClient.GeoPos(context.TODO(), "drivers", driverId).Result()
-		// if err != nil {
-		// 	fmt.Printf("Error fetching location for driver %s: %v\n", driverId, err)
-		// 	continue
-		// }
-
-		// if len(pos) > 0 && pos[0] != nil {
-		// 	driverlocation = append(driverlocation, forms.DriverLocation{
-		// 		ID:        driverId,
-		// 		Latitude:  pos[0].Latitude,
-		// 		Longitude: pos[0].Longitude,
-		// 	})
-		// }
-
-		// Check if this driver is connected via WebSocket
 		forms.DriverMutex.Lock()
 		conn, exists := forms.DriverConnections[driverId]
 		forms.DriverMutex.Unlock()
@@ -82,9 +62,7 @@ func (d *DriverModel) GetNearbyDrivers(customerLocation forms.CustomerLocation) 
 			continue
 		}
 
-		request := gin.H{"message": "New ride request", "customer_id": customerLocation}
-		err := conn.WriteJSON(request)
-
+		err := conn.WriteJSON(gin.H{"message": "New ride request", "customer_id": customerLocation})
 		if err != nil {
 			log.Println("Error sending ride request to driver", driverId, ":", err)
 			continue
@@ -92,13 +70,13 @@ func (d *DriverModel) GetNearbyDrivers(customerLocation forms.CustomerLocation) 
 
 		log.Println("Ride request sent to driver", driverId)
 
-		// Wait for driver response (max 10 seconds)
-		accepted := WaitForDriverResponse(driverId, 10*time.Second)
-		if accepted {
+		if WaitForDriverResponse(driverId, 10*time.Second) {
 			log.Println("Driver", driverId, "accepted the ride. Stopping further requests.")
+			return driverlocation, nil
 		}
 	}
-	return driverlocation, nil
+
+	return nil, fmt.Errorf("no drivers accepted the ride")
 }
 
 func (d *DriverModel) GetAllDrivers() ([]forms.DriverLocation, error) {
@@ -144,14 +122,15 @@ func WaitForDriverResponse(driverID string, timeout time.Duration) bool {
 	for time.Since(start) < timeout {
 		forms.DriverMutex.Lock()
 		accepted, exists := forms.RideAcceptStatus[driverID]
+		if exists {
+			delete(forms.RideAcceptStatus, driverID) // Remove status after reading
+		}
 		forms.DriverMutex.Unlock()
 
 		if exists && accepted {
 			return true
 		}
-
-		time.Sleep(1 * time.Second) // Check every second
+		time.Sleep(1 * time.Second)
 	}
-
 	return false
 }

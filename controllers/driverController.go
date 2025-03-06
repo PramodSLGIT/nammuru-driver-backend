@@ -6,6 +6,7 @@ import (
 	"nammuru-driver-backend/models"
 	"nammuru-driver-backend/utils"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -55,65 +56,52 @@ func (d *DriverController) DriverLocation(c *gin.Context) {
 	conn, err := utils.UpgradeToWebSocket(c)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"WebSocket connection failed": err.Error()})
-
 		c.Abort()
 		return
 	}
-	defer conn.Close()
 
 	var location form.DriverLocation
 
-	err = conn.ReadJSON(&location)
-	if err != nil {
+	// Read initial location update
+	if err := conn.ReadJSON(&location); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"Location failed": err.Error()})
-
 		c.Abort()
 		return
 	}
 
 	form.DriverMutex.Lock()
+	if oldConn, exists := form.DriverConnections[location.ID]; exists {
+		oldConn.Close() // Close previous connection before replacing it
+	}
 	form.DriverConnections[location.ID] = conn
 	form.DriverMutex.Unlock()
 
-	err = drivermodel.UpdateDriverLocation(location)
-	if err != nil {
-		log.Println("Error updating location:", err)
-	}
 	defer func() {
 		form.DriverMutex.Lock()
 		delete(form.DriverConnections, location.ID) // Remove driver when disconnected
 		form.DriverMutex.Unlock()
 		log.Println("Driver disconnected:", location.ID)
+		conn.Close()
 	}()
 
 	go d.RideAccept(conn, location.ID)
 
 	for {
-
-		err := conn.ReadJSON(&location)
-		if err != nil {
+		if err := conn.ReadJSON(&location); err != nil {
 			log.Println("Error reading JSON:", err)
 			break
 		}
 
-		err = drivermodel.UpdateDriverLocation(location)
-		if err != nil {
+		if err := drivermodel.UpdateDriverLocation(location); err != nil {
 			log.Println("Error updating location:", err)
 			break
 		}
 
-		resp := map[string]string{
-			"status":  "success",
-			"message": "Location updated",
-		}
-
-		if err := conn.WriteJSON(resp); err != nil {
+		if err := conn.WriteJSON(gin.H{"status": "success", "message": "Location updated"}); err != nil {
 			log.Println("Error sending response:", err)
 			break
 		}
 	}
-	log.Println("Driver disconnected from WebSocket")
-
 }
 
 func (d *DriverController) GetNearbyDrivers(c *gin.Context) {
@@ -147,25 +135,23 @@ func (d *DriverController) GetAllDrivers(c *gin.Context) {
 }
 
 func (d *DriverController) RideAccept(conn *websocket.Conn, driverID string) {
-	for {
+	acceptChan := make(chan bool)
+	timeout := time.After(15 * time.Second) // Timeout for ride acceptance
+
+	go func() {
 		var response form.RideAccept
-
-		// Wait for driver to accept/reject the ride
-		if err := conn.ReadJSON(&response); err != nil {
-			log.Println("Error reading ride accept response:", err)
-			break
+		if err := conn.ReadJSON(&response); err == nil && response.Accepted {
+			acceptChan <- true
 		}
+	}()
 
-		if response.Accepted {
-			log.Println("Driver", driverID, "accepted the ride.")
-
-			// Store acceptance in shared state
-			form.DriverMutex.Lock()
-			form.RideAcceptStatus[driverID] = true
-			form.DriverMutex.Unlock()
-
-			// Notify customer backend (optional: via Redis, HTTP, etc.)
-			break
-		}
+	select {
+	case <-acceptChan:
+		log.Println("Driver", driverID, "accepted the ride.")
+		form.DriverMutex.Lock()
+		form.RideAcceptStatus[driverID] = true
+		form.DriverMutex.Unlock()
+	case <-timeout:
+		log.Println("Driver", driverID, "did not respond in time.")
 	}
 }
