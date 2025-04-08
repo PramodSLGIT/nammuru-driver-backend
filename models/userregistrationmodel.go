@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log"
@@ -184,4 +185,39 @@ func (u *UserRegistration) AddProfileImage(data forms.UserModel) (updateId inter
 		return updateId, err
 	}
 	return updateId, err
+}
+
+func (u *UserRegistration) UserLogin(phoneNumber string, password string) (user forms.UserRegistrationForm, success bool, err error) {
+	ctx := context.TODO()
+	collection := mdbConn.Use(forms.DB, forms.DriverCollection)
+	var userm forms.UserModel
+	filter := bson.M{
+		"phone_number": phoneNumber,
+	}
+	err = collection.FindOne(ctx, filter).Decode(&userm)
+	if err != nil {
+		return user, false, err
+	}
+
+	// Password check (should use bcrypt ideally)
+	if userm.PhoneNumber != phoneNumber || userm.Password != password {
+		return user, false, errors.New("invalid credentials")
+	}
+
+	base64Image := ""
+	if len(userm.ProfileImage) > 0 {
+		base64Image = base64.StdEncoding.EncodeToString(userm.ProfileImage)
+	}
+
+	// Map UserModel to UserRegistrationForm
+	user = forms.UserRegistrationForm{
+		ProfileImage: base64Image,
+		Name:         userm.Name,
+		Email:        userm.Email,
+		PhoneNumber:  userm.PhoneNumber,
+		Gender:       userm.Gender,
+		KYCData:      userm.KYCData,
+		Password:     userm.Password, // Consider omitting or masking
+	}
+	return user, true, err
 }

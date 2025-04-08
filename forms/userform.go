@@ -16,6 +16,16 @@ const (
 	VehicleCollection = "vehicle_info"
 )
 
+type UserRegistrationForm struct {
+	ProfileImage string `json:"profile_image"` // Base64 string from frontend
+	Name         string `json:"name"`
+	Email        string `json:"email"`
+	PhoneNumber  string `json:"phone_number"`
+	Gender       string `json:"gender"`
+	KYCData      KYC    `json:"kyc"`
+	Password     string `json:"password"`
+}
+
 type UserModel struct {
 	ProfileImage []byte `json:"profile_image" bson:"profile_image" binding:"-"`
 	Name         string `json:"name" bson:"name" binding:"-"`
@@ -23,6 +33,7 @@ type UserModel struct {
 	PhoneNumber  string `json:"phone_number" bson:"phone_number" binding:"-"`
 	Gender       string `json:"gender" bson:"gender" binding:"-"`
 	KYCData      KYC    `json:"kyc" bson:"kyc" binding:"-"`
+	Password     string `json:"password" bson:"password" binding:"-"`
 }
 
 type LoginUserModel struct {
@@ -41,4 +52,9 @@ type Vechicle struct {
 	Registration string             `json:"registration" bson:"registration" binding:"-"`
 	Model        string             `json:"model" bson:"model" binding:"-"`
 	VehicleImage []byte             `json:"vehicle_image" bson:"vehicle_image" binding:"-"`
+}
+
+type LoginModel struct {
+	PhoneNumber string `json:"phone_number" binding:"required"`
+	Password    string `json:"password" binding:"required"`
 }
